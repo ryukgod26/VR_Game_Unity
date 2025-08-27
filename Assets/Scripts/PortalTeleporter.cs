@@ -30,10 +30,12 @@ public class PortalTeleporter : MonoBehaviour
 
     private void TeleportPlayer()
     {
+        Debug.Log("Teleporting Player");
         // Important: If you are using a CharacterController, you must disable it before teleporting
         CharacterController cc = player.GetComponent<CharacterController>();
         if (cc != null)
         {
+            Debug.Log("Finded Character");
             cc.enabled = false;
         }
 
@@ -47,6 +49,7 @@ public class PortalTeleporter : MonoBehaviour
         if (cc != null)
         {
             cc.enabled = true;
+            Debug.Log("TelePortation Completed");
         }
     }
 }
