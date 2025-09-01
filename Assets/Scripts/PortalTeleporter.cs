@@ -2,54 +2,102 @@ using UnityEngine;
 
 public class PortalTeleporter : MonoBehaviour
 {
+    [Header("References")]
+    [Tooltip("Root transform of the Player/XR Origin. If left empty will attempt to auto-find by tag 'Player'.")]
     public Transform player;
+    [Tooltip("Destination portal (the exit). Player will be moved to its position & rotation.")]
     public Transform destinationPortal;
 
-    private bool isTeleporting = false;
+    [Header("Settings")] 
+    [Tooltip("Optional extra offset applied after teleport (e.g., to avoid overlapping portal collider).")]
+    public Vector3 exitOffset = Vector3.forward * 0.25f;
+    [Tooltip("Delay (seconds) before allowing another teleport after exiting the portal.")]
+    public float cooldown = 0.25f;
 
-    // This function is called when another collider enters this trigger
-    private void OnTriggerEnter(Collider other)
+    private bool isTeleporting = false;
+    private float cooldownTimer = 0f;
+
+    private void Awake()
     {
-        // Check if the object entering is the player and we aren't already teleporting
-        if (other.CompareTag("Player") && !isTeleporting)
+        if (player == null)
         {
-            isTeleporting = true;
-            TeleportPlayer();
+            GameObject tagged = GameObject.FindGameObjectWithTag("Player");
+            if (tagged != null) player = tagged.transform;
+        }
+        if (destinationPortal == null)
+        {
+            Debug.LogWarning(name + ": Destination portal not assigned.");
         }
     }
 
-    // This function is called when another collider exits this trigger
-    private void OnTriggerExit(Collider other)
+    private void Update()
     {
-        // Allow teleporting again once the player has left the portal area
-        if (other.CompareTag("Player"))
+        if (cooldownTimer > 0f)
         {
-            isTeleporting = false;
+            cooldownTimer -= Time.deltaTime;
+            if (cooldownTimer <= 0f)
+            {
+                cooldownTimer = 0f;
+                isTeleporting = false; // ensure reset after cooldown.
+            }
         }
+    }
+
+    private void OnTriggerEnter(Collider other)
+    {
+        TryInitiateTeleport(other);
+    }
+
+    private void OnTriggerStay(Collider other)
+    {
+        // In case high speed causes enter to miss or player already inside when scene loads.
+        TryInitiateTeleport(other);
+    }
+
+    private void TryInitiateTeleport(Collider other)
+    {
+        if (isTeleporting || cooldownTimer > 0f) return;
+        if (!IsPlayerCollider(other)) return;
+
+        // If player ref still null but we detected a child, climb up to root that has CharacterController
+        if (player == null)
+        {
+            var cc = other.GetComponentInParent<CharacterController>();
+            if (cc != null) player = cc.transform;
+            else player = other.transform.root; // fallback
+        }
+        TeleportPlayer();
+    }
+
+    private bool IsPlayerCollider(Collider other)
+    {
+        if (player == null) return other.CompareTag("Player");
+        // Check if the collider belongs to the player hierarchy.
+        return other.transform == player || other.transform.IsChildOf(player);
     }
 
     private void TeleportPlayer()
     {
-        Debug.Log("Teleporting Player");
-        // Important: If you are using a CharacterController, you must disable it before teleporting
+        if (player == null || destinationPortal == null)
+        {
+            Debug.LogWarning(name + ": Cannot teleport - missing references.");
+            return;
+        }
+
+        isTeleporting = true;
+        cooldownTimer = cooldown; // start cooldown immediately.
+
+        Debug.Log("[PortalTeleporter] Teleporting player to " + destinationPortal.name);
+
         CharacterController cc = player.GetComponent<CharacterController>();
-        if (cc != null)
-        {
-            Debug.Log("Finded Character");
-            cc.enabled = false;
-        }
+        bool hadCC = cc != null && cc.enabled;
+        if (hadCC) cc.enabled = false;
 
-        // Move the player to the destination's position
-        player.position = destinationPortal.position;
+        // Teleport position & rotation
+        Vector3 targetPos = destinationPortal.position + destinationPortal.TransformVector(exitOffset);
+        player.SetPositionAndRotation(targetPos, destinationPortal.rotation);
 
-        // Rotate the player to face the destination's forward direction
-        player.rotation = destinationPortal.rotation;
-
-        // Re-enable the CharacterController after the teleport is complete
-        if (cc != null)
-        {
-            cc.enabled = true;
-            Debug.Log("TelePortation Completed");
-        }
+        if (hadCC) cc.enabled = true;
+        Debug.Log("[PortalTeleporter] Teleport complete.");
     }
 }

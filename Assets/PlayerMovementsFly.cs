@@ -9,6 +9,7 @@ public class PlayerMovementsFly : MonoBehaviour
     private InputAction moveAction;
 
     public float speed = 12f;
+    [Tooltip("Gravity force applied every second (negative value).")]
     public float gravity = -9.81f;
     private bool movementIsEnabled = true;
 
@@ -72,28 +73,24 @@ public class PlayerMovementsFly : MonoBehaviour
     }
     void Update()
     {
-        if (!movementIsEnabled)
-        {
-            return;
-        }
-
+        if (!movementIsEnabled) return;
         if (controller == null || moveAction == null) return;
 
-
-        // --- HORIZONTAL MOVEMENT ---
+        // Read planar input (Vector2). We purposely ignore any attempt to inject vertical motion via keys (Q/E etc.).
         Vector2 moveInput = moveAction.ReadValue<Vector2>();
-        Vector3 move = transform.right * moveInput.x + transform.forward * moveInput.y;
-        controller.Move(move * speed * Time.deltaTime);
 
-        // --- VERTICAL MOVEMENT (GRAVITY ONLY) ---
-        if (controller.isGrounded && verticalVelocity.y < 0)
+        // Build a yaw-only frame so that looking up/down (pitch) does NOT cause ascent.
+        Vector3 fwd = transform.forward; fwd.y = 0f; fwd = fwd.sqrMagnitude > 0.0001f ? fwd.normalized : Vector3.forward;
+        Vector3 right = transform.right; right.y = 0f; right = right.sqrMagnitude > 0.0001f ? right.normalized : Vector3.right;
+        Vector3 desired = (right * moveInput.x + fwd * moveInput.y) * speed;
+        controller.Move(desired * Time.deltaTime);
+
+        // Gravity handling (always downward only)
+        if (controller.isGrounded && verticalVelocity.y < 0f)
         {
-            verticalVelocity.y = -2f; // Keep player grounded
+            verticalVelocity.y = -2f; // sticky ground force
         }
-
-        // Always apply gravity
         verticalVelocity.y += gravity * Time.deltaTime;
         controller.Move(verticalVelocity * Time.deltaTime);
-
     }
 }
